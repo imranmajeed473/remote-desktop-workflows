@@ -29,18 +29,50 @@ jobs:
           Write-Host "🚀 WINDOWS RDP - CLOUDFLARE TUNNEL"
           Write-Host "============================================"
           Write-Host ""
-          Start-Process PowerShell -ArgumentList '-NoExit -Command "cloudflared tunnel --url tcp://localhost:3389"'
-          Start-Sleep -Seconds 15
+
+          # Start cloudflared and redirect BOTH stdout and stderr to a log file
+          Start-Process -FilePath "cloudflared" `
+            -ArgumentList "tunnel --url tcp://localhost:3389" `
+            -RedirectStandardOutput "$env:TEMP\cf_out.log" `
+            -RedirectStandardError  "$env:TEMP\cf_err.log" `
+            -NoNewWindow
+
+          # Wait for the tunnel URL to appear (up to 60 seconds)
+          $url = $null
+          for ($i = 0; $i -lt 30; $i++) {
+            Start-Sleep -Seconds 2
+            $content = ""
+            if (Test-Path "$env:TEMP\cf_out.log") { $content += Get-Content "$env:TEMP\cf_out.log" -Raw }
+            if (Test-Path "$env:TEMP\cf_err.log") { $content += Get-Content "$env:TEMP\cf_err.log" -Raw }
+            $match = [regex]::Match($content, 'https://[a-zA-Z0-9\-]+\.trycloudflare\.com')
+            if ($match.Success) {
+              $url = $match.Value
+              break
+            }
+          }
+
           Write-Host ""
-          Write-Host "✅ TUNNEL STARTED! Check separate PowerShell window for URL"
-          Write-Host ""
-          Write-Host "📋 CONNECTION DETAILS:"
-          Write-Host "   USERNAME: runneradmin"
-          Write-Host "   PASSWORD: P@ssw0rd123!"
-          Write-Host "   OS: Windows Server 2022"
-          Write-Host "   CPU: 4 cores"
-          Write-Host "   RAM: 16GB"
-          Write-Host "============================================"
+          if ($url) {
+            Write-Host "✅ TUNNEL STARTED!"
+            Write-Host ""
+            Write-Host "============================================"
+            Write-Host "🔗 YOUR TUNNEL URL:"
+            Write-Host "   $url"
+            Write-Host ""
+            Write-Host "📋 CONNECTION DETAILS:"
+            Write-Host "   USERNAME: runneradmin"
+            Write-Host "   PASSWORD: P@ssw0rd123!"
+            Write-Host "   OS: Windows Server 2022"
+            Write-Host "   CPU: 4 cores"
+            Write-Host "   RAM: 16GB"
+            Write-Host "============================================"
+          } else {
+            Write-Host "❌ Could not detect tunnel URL. Dumping logs:"
+            Write-Host "--- STDOUT ---"
+            if (Test-Path "$env:TEMP\cf_out.log") { Get-Content "$env:TEMP\cf_out.log" }
+            Write-Host "--- STDERR ---"
+            if (Test-Path "$env:TEMP\cf_err.log") { Get-Content "$env:TEMP\cf_err.log" }
+          }
 
       - name: Keep Session Alive
         run: |
